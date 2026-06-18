@@ -198,6 +198,165 @@ You should see `ubuntu` printed in the console.
 
 ---
 
+## Generating SSH Keys Locally
+
+In the AWS workflow above, AWS generates the key pair for you and you download the `.pem` file. In other contexts — connecting to a non-AWS server, setting up GitHub access, or managing your own infrastructure — you generate the key pair yourself using `ssh-keygen`.
+
+```bash
+ssh-keygen -t ed25519 -C "your_email@example.com"
+```
+
+> **Breaking down the command:**
+> - `ssh-keygen` — the tool that generates a new key pair.
+> - `-t ed25519` — specifies the key type. Ed25519 is the modern recommended algorithm: faster and more secure than the older RSA default. Use RSA (`-t rsa -b 4096`) only if the remote system does not support Ed25519.
+> - `-C "your_email@example.com"` — adds a comment to the public key, typically your email, to help identify which key belongs to whom when you have many keys.
+
+When prompted, choose a save location (default is `~/.ssh/id_ed25519`) and optionally enter a passphrase to encrypt the private key.
+
+This produces two files:
+
+| File | Purpose |
+|---|---|
+| `~/.ssh/id_ed25519` | Your **private key** — never share this |
+| `~/.ssh/id_ed25519.pub` | Your **public key** — safe to share with servers |
+
+---
+
+## Adding a Public Key to a Remote Server
+
+Once you have a key pair, you need to place your public key on the remote server so it can verify your identity.
+
+### Using `ssh-copy-id` (Linux/macOS)
+
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub user@remote-server-ip
+```
+
+This appends your public key to `~/.ssh/authorized_keys` on the remote server automatically. You will be prompted for the user's password once — after that, key-based login replaces it.
+
+### Manually (Windows / no `ssh-copy-id`)
+
+Copy the contents of your public key file:
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+Then on the remote server, append it to the `authorized_keys` file:
+
+```bash
+mkdir -p ~/.ssh
+echo "your-public-key-contents" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+chmod 700 ~/.ssh
+```
+
+> **Why these permissions?**
+> SSH is strict: if `authorized_keys` is writable by anyone other than the owner, SSH refuses to use it as a security measure. `chmod 600` (owner read/write only) and `chmod 700` (owner full access) satisfy this requirement.
+
+---
+
+## SSH Agent
+
+Typing a passphrase every time you SSH somewhere is tedious. The **SSH agent** is a background process that holds your decrypted private key in memory for the duration of your session, so you only enter the passphrase once.
+
+Start the agent and add your key:
+
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+You will be prompted for your passphrase once. After that, any SSH or SCP command in that session uses the key automatically.
+
+> On macOS, add `--apple-use-keychain` to persist the passphrase across reboots:
+> ```bash
+> ssh-add --apple-use-keychain ~/.ssh/id_ed25519
+> ```
+
+---
+
+## Using SSH Keys with GitHub / GitLab
+
+SSH keys are the recommended way to authenticate with GitHub and GitLab instead of HTTPS passwords or personal access tokens.
+
+### Add your public key to GitHub
+
+1. Copy your public key:
+
+```bash
+cat ~/.ssh/id_ed25519.pub
+```
+
+2. Go to **GitHub → Settings → SSH and GPG keys → New SSH key**
+3. Paste the key, give it a descriptive title (e.g. `Work Laptop`), and click **Add SSH key**
+
+### Test the connection
+
+```bash
+ssh -T git@github.com
+```
+
+A successful response looks like:
+
+```
+Hi username! You've successfully authenticated, but GitHub does not provide shell access.
+```
+
+### Clone repositories over SSH
+
+```bash
+git clone git@github.com:username/repo-name.git
+```
+
+Using SSH instead of HTTPS means you never need to enter a password or manage personal access tokens for git operations.
+
+---
+
+## Managing SSH Keys
+
+### List your existing keys
+
+```bash
+ls -la ~/.ssh
+```
+
+Files ending in `.pub` are public keys. Files without `.pub` are the corresponding private keys.
+
+### View a public key's fingerprint
+
+```bash
+ssh-keygen -lf ~/.ssh/id_ed25519.pub
+```
+
+Fingerprints are a shorter representation of the key — useful for verifying you have the right key without comparing the full string.
+
+### Remove a key from a remote server
+
+Open `~/.ssh/authorized_keys` on the remote server and delete the line containing the public key you want to revoke. Each line is one key.
+
+### Troubleshooting common issues
+
+| Problem | Likely cause | Fix |
+|---|---|---|
+| `Permission denied (publickey)` | Wrong key, wrong user, or key not in `authorized_keys` | Check `-i` flag points to the right key; verify the public key is in `~/.ssh/authorized_keys` on the server |
+| `WARNING: UNPROTECTED PRIVATE KEY FILE!` | Key file permissions too open | Run `chmod 400 your-key.pem` |
+| `Connection refused` | SSH not running or wrong port | Confirm the server is running SSH on port 22; check firewall/security group rules |
+| `Host key verification failed` | Server fingerprint changed (re-provisioned server) | Remove the old entry: `ssh-keygen -R <server-ip>` |
+
+---
+
+## SSH Key Best Practices
+
+- **Use a passphrase.** An unencrypted private key is a credential that can be used immediately if stolen. A passphrase adds an essential second layer of protection.
+- **Use one key per device, not per service.** If a device is compromised, you revoke only that device's key without affecting others.
+- **Never share your private key.** The public key is designed to be shared; the private key is not. If you need someone else to access a server, add their public key to `authorized_keys` instead.
+- **Rotate keys regularly.** Generate a new key pair and update `authorized_keys` on all servers periodically, especially after a team member leaves.
+- **Disable password authentication on servers you control.** Once key-based auth is confirmed working, edit `/etc/ssh/sshd_config` and set `PasswordAuthentication no` to prevent brute-force attacks.
+- **Use Ed25519 over RSA.** Ed25519 keys are shorter, faster, and considered more secure than RSA-2048.
+
+---
+
 ## 9. Install and Verify Nginx
 
 > **What is Nginx?**
