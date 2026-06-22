@@ -8,6 +8,21 @@
 
 MongoDB is a **document-oriented NoSQL database** that stores data as flexible, JSON-like documents. Unlike traditional relational databases (like MySQL or PostgreSQL) that organise data into rigid rows and tables, MongoDB uses **collections** and **documents** — making it a natural fit for modern applications that deal with varied or frequently changing data.
 
+## Types of NoSQL Databases
+
+NoSQL ("Not Only SQL") is a broad category of databases that move away from the fixed table-and-row model of relational databases. There are four main types:
+
+| Type | How data is stored | Examples | Best for |
+|---|---|---|---|
+| **Document** | JSON/BSON documents in collections | MongoDB, CouchDB | Flexible records, APIs, content |
+| **Key-Value** | Simple key → value pairs | Redis, DynamoDB | Caching, sessions, leaderboards |
+| **Wide-Column** | Rows with dynamic columns across partitions | Cassandra, HBase | Time-series, IoT, write-heavy workloads |
+| **Graph** | Nodes and edges representing relationships | Neo4j, Amazon Neptune | Social networks, fraud detection, recommendations |
+
+MongoDB is an example of a **document database** — the most widely used NoSQL type.
+
+---
+
 ## Installing MongoDB Locally
 
 Download links for all popular operating systems can be found here:
@@ -472,6 +487,72 @@ To retrieve the full data, you would need to query both collections.
 | Best for         | One-to-few relationships | One-to-many / many-to-many   |
 | Update ease      | Harder across documents  | Easier (update in one place) |
 | Performance      | Faster reads             | Faster writes/updates        |
+
+---
+
+## Replica Sets
+
+A **replica set** is a group of MongoDB servers that all hold copies of the same data. It is MongoDB's built-in mechanism for **high availability** and **data redundancy**.
+
+### How it works
+
+A replica set always has:
+
+- **Primary** — the only node that accepts write operations. All changes flow through here.
+- **Secondaries** — one or more nodes that continuously replicate data from the primary. They can serve read requests but cannot accept writes.
+- **Arbiter** *(optional)* — a lightweight node that holds no data. Its sole purpose is to vote in elections.
+
+```
+         ┌─────────────┐
+Writes → │   Primary   │
+         └──────┬──────┘
+                │ replication
+       ┌────────┴────────┐
+       ▼                 ▼
+ ┌──────────┐     ┌──────────┐
+ │Secondary │     │Secondary │
+ └──────────┘     └──────────┘
+```
+
+### Automatic failover
+
+If the primary becomes unavailable, the remaining nodes hold an **election** and promote one of the secondaries to primary — automatically, with no manual intervention. This is what makes MongoDB resilient to server failures.
+
+> **In short:** Replica sets protect against data loss and keep your database available even if a server goes down.
+
+---
+
+## Sharding
+
+**Sharding** is MongoDB's approach to **horizontal scaling** — distributing data across multiple machines so that no single server has to hold or process everything.
+
+### The problem it solves
+
+A single MongoDB server has limits on storage and throughput. When a dataset grows too large for one machine, sharding splits it across many servers called **shards**, each holding a subset of the data.
+
+### How it works
+
+A sharded cluster has three components:
+
+| Component | Role |
+|---|---|
+| **Shards** | Each shard is a replica set that stores a portion of the data |
+| **Config servers** | Store metadata about which shard holds which data |
+| **mongos (query router)** | The entry point for client requests — routes queries to the correct shard(s) |
+
+MongoDB uses a **shard key** — a field you choose — to decide how to distribute documents across shards. For example, if your shard key is `country`, all UK documents might go to Shard A and all US documents to Shard B.
+
+```
+Client → mongos (router)
+              │
+    ┌─────────┼─────────┐
+    ▼         ▼         ▼
+ Shard A   Shard B   Shard C
+ (replica  (replica  (replica
+  set)      set)      set)
+```
+
+> **In short:** Replica sets protect against failure. Sharding handles growth. In production, each shard in a sharded cluster is itself a replica set — so you get both.
 
 ---
 
